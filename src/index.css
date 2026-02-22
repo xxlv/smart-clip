@@ -1,0 +1,479 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  color: #222;
+  background: #f6f6f6;
+  font-size: 15px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-wrap {
+  min-height: 100vh;
+}
+
+.clip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  max-height: 72vh;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.clip-item {
+  padding: 0.625rem 0.875rem;
+  border-radius: 10px;
+  margin-bottom: 0.375rem;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clip-item:hover {
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.clip-item:last-child {
+  margin-bottom: 0;
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #888;
+  font-size: 0.9375rem;
+}
+
+.header {
+  padding: 0.875rem 1.125rem;
+  border-bottom: none;
+  font-weight: 600;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.header-workspace-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #222;
+  min-width: 0;
+}
+
+.header-workspace-trigger:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.header-workspace-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.header-workspace-name {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-workspace-chevron {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.workspace-panel {
+  margin: 0 1rem 0.875rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.workspace-panel-head {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 0.5rem;
+}
+
+.workspace-list {
+  list-style: none;
+  margin: 0 0 0.75rem 0;
+  padding: 0;
+}
+
+.workspace-list li {
+  margin: 0;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: #333;
+  text-align: left;
+}
+
+.workspace-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.workspace-item.active {
+  background: rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+
+.workspace-item-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.workspace-item-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.workspace-add-input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8125rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.workspace-add-input:focus {
+  outline: none;
+  border-color: #888;
+}
+
+.workspace-desc {
+  margin: 0 1rem 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #555;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(6px);
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.btn-icon {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.btn-icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 1;
+}
+
+.settings-panel {
+  margin: 0 1rem 0.875rem;
+  padding: 0.875rem 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.settings-head {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 0.5rem;
+}
+
+.settings-head:not(:first-child) {
+  margin-top: 1rem;
+}
+
+.settings-workspace-meta {
+  margin-bottom: 0.75rem;
+}
+
+.settings-workspace-meta .settings-row {
+  margin-bottom: 0.5rem;
+}
+
+.settings-workspace-input {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.settings-workspace-icon-input {
+  width: 3rem;
+  padding: 0.35rem;
+  font-size: 1rem;
+  text-align: center;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.settings-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.settings-radio input {
+  accent-color: #333;
+}
+
+.settings-gradient,
+.settings-image {
+  margin-bottom: 0.75rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.8125rem;
+}
+
+.settings-row > span {
+  min-width: 4rem;
+  color: #555;
+}
+
+.settings-row input[type="color"] {
+  width: 2rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.settings-hex {
+  width: 5rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.settings-url {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.settings-row select {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.btn-browse {
+  display: inline-block;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.btn-browse:hover {
+  background: #eee;
+}
+
+.btn-reset {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #555;
+  cursor: pointer;
+}
+
+.btn-reset:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-add,
+.btn-clear {
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.btn-add:hover,
+.btn-clear:hover {
+  background: #eee;
+}
+
+.btn-clear {
+  color: #b33;
+}
+
+.btn-clear:hover {
+  background: #fde8e8;
+}
+
+.clip-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.clip-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-delete {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #999;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  background: #fde8e8;
+  color: #b33;
+}
+
+.btn-lang {
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  color: #666;
+  cursor: pointer;
+}
+
+.btn-lang:hover {
+  background: #eee;
+  color: #333;
+}
+
+.clip-preview {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(460px, calc(100vw - 24px));
+  max-height: 300px;
+  padding: 0.625rem 0.875rem;
+  background: #fff;
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.clip-preview-content {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 240px;
+}
+
+.clip-preview-size {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid #eee;
+  font-size: 0.75rem;
+  color: #888;
+}
