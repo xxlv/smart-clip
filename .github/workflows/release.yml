@@ -55,7 +55,9 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Smart Clip v__VERSION__
-          releaseBody: "See the assets to download DMG (macOS) or EXE (Windows)."
+          releaseBody: |
+            See the assets below for DMG (macOS) or EXE (Windows).
+            **macOS:** If you see "Smart Clip is damaged", right-click the app → Open, or run in Terminal: `xattr -cr "/path/to/Smart Clip.app"`
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

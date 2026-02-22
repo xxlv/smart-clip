@@ -37,6 +37,15 @@ npm install
 npm run tauri dev
 ```
 
+## Download (macOS)
+
+If macOS says **“Smart Clip” is damaged and can’t be opened**, the app is not code-signed (common for GitHub-built DMGs). It is safe to run:
+
+- **Option 1:** Right-click the app → **Open** → click **Open** in the dialog.
+- **Option 2:** In Terminal:  
+  `xattr -cr "/Volumes/Smart Clip 0.1.0/Smart Clip.app"`  
+  (adjust path if you already moved the app).
+
 ## Build
 
 ```bash

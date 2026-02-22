@@ -8,7 +8,7 @@
 
 <img src="docs/main.png" width="640" alt="Smart Clip 界面" />
 
-*主界面：工作区切换、剪贴列表、设置。*
+_主界面：工作区切换、剪贴列表、设置。_
 
 - **技术栈**: Vite + React (TypeScript) + Tauri 2 (Rust) + SQLite
 - **目录**: `/src-tauri` 后端与本地 DB，`/src` 前端界面，`/docs` 设计文档
