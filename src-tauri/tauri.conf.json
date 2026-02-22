@@ -28,7 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [],
+    "icon": ["icons/icon.ico"],
     "shortDescription": "Minimal clipboard with history",
     "longDescription": "Cross-platform clipboard with code highlight, Markdown preview, AME-backed history.",
     "category": "Utility",
