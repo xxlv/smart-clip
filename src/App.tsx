@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
   type Lang,
@@ -29,6 +30,7 @@ interface Clip {
 }
 
 const POLL_MS = 2000;
+const MIN_PREVIEW_LENGTH = 116; // hover preview only for content length > 115
 
 function byteSize(str: string): number {
   return new TextEncoder().encode(str).length;
@@ -100,10 +102,35 @@ function App() {
     top: number;
     left: number;
   } | null>(null);
+  const [shortcutEdit, setShortcutEdit] = useState("");
   const lastAddedRef = useRef<string>("");
   const hidePreviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const shortcutRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    invoke<string>("get_shortcut")
+      .then(async (shortcut) => {
+        if (!mounted) return;
+        try {
+          await unregister(shortcut).catch(() => {});
+          await register(shortcut, (event) => {
+            if (event.state === "Pressed") {
+              invoke("toggle_main_window").catch(() => {});
+            }
+          });
+          shortcutRef.current = shortcut;
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const refreshWorkspaces = useCallback(() => {
     invoke<Workspace[]>("get_workspaces").then(setWorkspaces).catch(() => setWorkspaces([]));
@@ -132,6 +159,32 @@ function App() {
   useEffect(() => {
     refreshWorkspaces();
   }, [refreshWorkspaces]);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      invoke<string>("get_shortcut").then(setShortcutEdit).catch(() => {});
+    }
+  }, [settingsOpen]);
+
+  const applyShortcut = useCallback(async () => {
+    const s = shortcutEdit.trim();
+    if (!s || s === shortcutRef.current) return;
+    try {
+      if (shortcutRef.current) {
+        await unregister(shortcutRef.current);
+      }
+      await invoke("set_shortcut", { shortcut: s });
+      await unregister(s).catch(() => {});
+      await register(s, (event) => {
+        if (event.state === "Pressed") {
+          invoke("toggle_main_window").catch(() => {});
+        }
+      });
+      shortcutRef.current = s;
+    } catch {
+      // ignore
+    }
+  }, [shortcutEdit]);
 
   useEffect(() => {
     if (workspaces.length > 0 && !workspaces.some((w) => w.id === currentWorkspaceId)) {
@@ -207,7 +260,7 @@ function App() {
   );
 
   const updateWorkspaceMeta = useCallback(
-    async (updates: { name?: string; description?: string; icon?: string }) => {
+    async (updates: { name?: string; description?: string; icon?: string; read_only?: boolean }) => {
       try {
         await invoke("update_workspace", {
           id: currentWorkspaceId,
@@ -250,6 +303,7 @@ function App() {
 
   const showPreview = useCallback(
     (e: React.MouseEvent<HTMLLIElement>, content: string) => {
+      if (content.length < MIN_PREVIEW_LENGTH) return;
       if (hidePreviewTimeoutRef.current) {
         clearTimeout(hidePreviewTimeoutRef.current);
         hidePreviewTimeoutRef.current = null;
@@ -341,6 +395,7 @@ function App() {
 
   const appBgStyle = getBackgroundStyle(bgType, gradient, imageUrl);
   const currentWs = workspaces.find((w) => w.id === currentWorkspaceId);
+  const isReadOnly = Boolean(currentWorkspace?.read_only);
 
   return (
     <div className="app-wrap" style={appBgStyle}>
@@ -379,7 +434,7 @@ function App() {
           >
             {t(lang, "langToggle")}
           </button>
-          {clips.length > 0 && (
+          {!isReadOnly && clips.length > 0 && (
             <button type="button" className="btn-clear" onClick={clearAll}>
               {t(lang, "clear")}
             </button>
@@ -429,6 +484,20 @@ function App() {
       )}
       {settingsOpen && (
         <section className="settings-panel">
+          <div className="settings-head">{t(lang, "shortcut")}</div>
+          <div className="settings-row">
+            <span>{t(lang, "shortcutLabel")}</span>
+            <input
+              type="text"
+              className="settings-workspace-input"
+              value={shortcutEdit}
+              onChange={(e) => setShortcutEdit(e.target.value)}
+              onBlur={applyShortcut}
+              onKeyDown={(e) => e.key === "Enter" && applyShortcut()}
+              placeholder={t(lang, "shortcutPlaceholder")}
+              aria-label={t(lang, "shortcutLabel")}
+            />
+          </div>
           <div className="settings-head">{t(lang, "currentWorkspace")}</div>
           <div className="settings-workspace-meta">
             <div className="settings-row">
@@ -471,7 +540,43 @@ function App() {
                 onChange={(e) =>
                   updateWorkspaceMeta({ icon: e.target.value || "📋" })
                 }
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                aria-label={t(lang, "workspaceIcon")}
               />
+              <div className="settings-workspace-icon-picker">
+                {["📋", "📁", "📌", "✏️", "🗂️", "📎", "⭐", "🔖"].map(
+                  (emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      title={emoji}
+                      className={
+                        (currentWorkspace?.icon ?? "📋") === emoji
+                          ? "active"
+                          : ""
+                      }
+                      onClick={() => updateWorkspaceMeta({ icon: emoji })}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {emoji}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+            <div className="settings-row settings-row-checkbox">
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={currentWorkspace?.read_only ?? false}
+                  onChange={(e) =>
+                    updateWorkspaceMeta({ read_only: e.target.checked })
+                  }
+                />
+                <span>{t(lang, "workspaceReadOnly")}</span>
+              </label>
             </div>
           </div>
           <div className="settings-head">{t(lang, "background")}</div>
@@ -612,15 +717,17 @@ function App() {
                 {c.content.slice(0, 120)}
                 {c.content.length > 120 ? "…" : ""}
               </span>
-              <button
-                type="button"
-                className="btn-delete"
-                title={t(lang, "delete")}
-                onClick={(e) => deleteOne(e, c.id)}
-                aria-label={t(lang, "delete")}
-              >
-                ×
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  className="btn-delete"
+                  title={t(lang, "delete")}
+                  onClick={(e) => deleteOne(e, c.id)}
+                  aria-label={t(lang, "delete")}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))
         )}

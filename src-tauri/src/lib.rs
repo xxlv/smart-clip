@@ -5,9 +5,13 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 #[cfg(target_os = "linux")]
-const SHORTCUT: &str = "Super+C";
+fn default_shortcut() -> String {
+    "Super+C".into()
+}
 #[cfg(not(target_os = "linux"))]
-const SHORTCUT: &str = "Alt+C";
+fn default_shortcut() -> String {
+    "Alt+C".into()
+}
 
 const DEFAULT_WORKSPACE_NAME: &str = "默认";
 const DEFAULT_WORKSPACE_ICON: &str = "📋";
@@ -21,6 +25,39 @@ fn db_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("smart-clip")
         .join("clips.db")
+}
+
+fn config_path() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("smart-clip")
+        .join("config.json")
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct AppConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shortcut: Option<String>,
+}
+
+fn load_config() -> AppConfig {
+    let path = config_path();
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        if let Ok(c) = serde_json::from_str::<AppConfig>(&data) {
+            return c;
+        }
+    }
+    AppConfig::default()
+}
+
+fn save_config(config: &AppConfig) -> Result<(), String> {
+    let path = config_path();
+    if let Some(p) = path.parent() {
+        let _ = std::fs::create_dir_all(p);
+    }
+    let data = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn init_db() -> rusqlite::Result<Connection> {
@@ -48,6 +85,7 @@ fn init_db() -> rusqlite::Result<Connection> {
             bg_gradient TEXT,
             bg_image_url TEXT NOT NULL DEFAULT '',
             sort_order INTEGER NOT NULL DEFAULT 0,
+            read_only INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )",
         [],
@@ -61,6 +99,16 @@ fn init_db() -> rusqlite::Result<Connection> {
         .unwrap_or(0);
     if col_count == 0 {
         let _ = conn.execute("ALTER TABLE clips ADD COLUMN workspace_id INTEGER NOT NULL DEFAULT 1", []);
+    }
+    let read_only_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('workspaces') WHERE name='read_only'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if read_only_count == 0 {
+        let _ = conn.execute("ALTER TABLE workspaces ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0", []);
     }
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))?;
     if count == 0 {
@@ -89,6 +137,8 @@ struct Workspace {
     bg_gradient: Option<String>,
     bg_image_url: String,
     sort_order: i64,
+    #[serde(default)]
+    read_only: bool,
     created_at: String,
 }
 
@@ -98,7 +148,7 @@ fn get_workspaces(state: tauri::State<AppState>) -> Result<Vec<Workspace>, Strin
     let conn = guard.as_ref().ok_or("DB not initialized")?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, description, icon, bg_type, bg_gradient, bg_image_url, sort_order, created_at
+            "SELECT id, name, description, icon, bg_type, bg_gradient, bg_image_url, sort_order, read_only, created_at
              FROM workspaces ORDER BY sort_order ASC, id ASC",
         )
         .map_err(|e| e.to_string())?;
@@ -113,7 +163,8 @@ fn get_workspaces(state: tauri::State<AppState>) -> Result<Vec<Workspace>, Strin
                 bg_gradient: row.get(5)?,
                 bg_image_url: row.get(6)?,
                 sort_order: row.get(7)?,
-                created_at: row.get(8)?,
+                read_only: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -130,7 +181,7 @@ fn get_workspace(id: i64, state: tauri::State<AppState>) -> Result<Option<Worksp
     let conn = guard.as_ref().ok_or("DB not initialized")?;
     let opt = conn
         .query_row(
-            "SELECT id, name, description, icon, bg_type, bg_gradient, bg_image_url, sort_order, created_at
+            "SELECT id, name, description, icon, bg_type, bg_gradient, bg_image_url, sort_order, read_only, created_at
              FROM workspaces WHERE id = ?1",
             params![id],
             |row| {
@@ -143,7 +194,8 @@ fn get_workspace(id: i64, state: tauri::State<AppState>) -> Result<Option<Worksp
                     bg_gradient: row.get(5)?,
                     bg_image_url: row.get(6)?,
                     sort_order: row.get(7)?,
-                    created_at: row.get(8)?,
+                    read_only: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                    created_at: row.get(9)?,
                 })
             },
         )
@@ -169,7 +221,7 @@ fn create_workspace(
         .map_err(|e| e.to_string())?;
     let sort_order = max_order.unwrap_or(0) + 1;
     conn.execute(
-        "INSERT INTO workspaces (name, description, icon, sort_order) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT INTO workspaces (name, description, icon, sort_order, read_only) VALUES (?1, ?2, ?3, ?4, 0)",
         params![name, desc, icon_str, sort_order],
     )
     .map_err(|e| e.to_string())?;
@@ -186,6 +238,7 @@ struct UpdateWorkspaceInput {
     bg_type: Option<String>,
     bg_gradient: Option<String>,
     bg_image_url: Option<String>,
+    read_only: Option<bool>,
 }
 
 #[tauri::command]
@@ -196,9 +249,9 @@ fn update_workspace(
 ) -> Result<(), String> {
     let guard = state.db.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("DB not initialized")?;
-    let current: Option<(String, String, String, String, Option<String>, String)> = conn
+    let current: Option<(String, String, String, String, Option<String>, String, i64)> = conn
         .query_row(
-            "SELECT name, description, icon, bg_type, bg_gradient, bg_image_url FROM workspaces WHERE id = ?1",
+            "SELECT name, description, icon, bg_type, bg_gradient, bg_image_url, read_only FROM workspaces WHERE id = ?1",
             params![id],
             |row| {
                 Ok((
@@ -208,12 +261,13 @@ fn update_workspace(
                     row.get(3)?,
                     row.get(4)?,
                     row.get(5)?,
+                    row.get(6)?,
                 ))
             },
         )
         .optional()
         .map_err(|e| e.to_string())?;
-    let (name, desc, icon, bg_type, bg_gradient, bg_image_url) =
+    let (name, desc, icon, bg_type, bg_gradient, bg_image_url, read_only) =
         current.ok_or("Workspace not found")?;
     let name = input.name.unwrap_or(name);
     let desc = input.description.unwrap_or(desc);
@@ -221,9 +275,13 @@ fn update_workspace(
     let bg_type = input.bg_type.unwrap_or(bg_type);
     let bg_gradient = input.bg_gradient.or(bg_gradient);
     let bg_image_url = input.bg_image_url.unwrap_or(bg_image_url);
+    let read_only = input
+        .read_only
+        .map(|b| if b { 1i64 } else { 0 })
+        .unwrap_or(read_only);
     conn.execute(
-        "UPDATE workspaces SET name=?1, description=?2, icon=?3, bg_type=?4, bg_gradient=?5, bg_image_url=?6 WHERE id=?7",
-        params![name, desc, icon, bg_type, bg_gradient, bg_image_url, id],
+        "UPDATE workspaces SET name=?1, description=?2, icon=?3, bg_type=?4, bg_gradient=?5, bg_image_url=?6, read_only=?7 WHERE id=?8",
+        params![name, desc, icon, bg_type, bg_gradient, bg_image_url, read_only, id],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -274,6 +332,16 @@ fn add_clip(
 ) -> Result<(), String> {
     let guard = state.db.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("DB not initialized")?;
+    let read_only: i64 = conn
+        .query_row(
+            "SELECT read_only FROM workspaces WHERE id = ?1",
+            params![workspace_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if read_only != 0 {
+        return Ok(());
+    }
     let last: Option<String> = conn
         .query_row(
             "SELECT content FROM clips WHERE workspace_id = ?1 ORDER BY id DESC LIMIT 1",
@@ -297,6 +365,16 @@ fn add_clip(
 fn delete_clip(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
     let guard = state.db.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("DB not initialized")?;
+    let read_only: i64 = conn
+        .query_row(
+            "SELECT w.read_only FROM clips c JOIN workspaces w ON c.workspace_id = w.id WHERE c.id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if read_only != 0 {
+        return Err("Workspace is read-only".to_string());
+    }
     conn.execute("DELETE FROM clips WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -306,8 +384,52 @@ fn delete_clip(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
 fn clear_clips(workspace_id: i64, state: tauri::State<AppState>) -> Result<(), String> {
     let guard = state.db.lock().map_err(|e| e.to_string())?;
     let conn = guard.as_ref().ok_or("DB not initialized")?;
+    let read_only: i64 = conn
+        .query_row(
+            "SELECT read_only FROM workspaces WHERE id = ?1",
+            params![workspace_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if read_only != 0 {
+        return Err("Workspace is read-only".to_string());
+    }
     conn.execute("DELETE FROM clips WHERE workspace_id = ?1", params![workspace_id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_shortcut() -> String {
+    let config = load_config();
+    config
+        .shortcut
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(default_shortcut)
+}
+
+#[tauri::command]
+fn set_shortcut(shortcut: String) -> Result<(), String> {
+    let s = shortcut.trim();
+    if s.is_empty() {
+        return Err("Shortcut cannot be empty".to_string());
+    }
+    let mut config = load_config();
+    config.shortcut = Some(s.to_string());
+    save_config(&config)
+}
+
+#[tauri::command]
+fn toggle_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let w = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    if w.is_visible().map_err(|e| e.to_string())? {
+        w.hide().map_err(|e| e.to_string())?;
+    } else {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -334,6 +456,9 @@ pub fn run() {
         add_clip,
         delete_clip,
         clear_clips,
+        get_shortcut,
+        set_shortcut,
+        toggle_main_window,
     ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -344,20 +469,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::ShortcutState;
-
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
-                        .with_shortcuts([SHORTCUT])
-                        .map_err(|e| e.to_string())?
-                        .with_handler(|app_handle, _shortcut, event| {
-                            if event.state == ShortcutState::Pressed {
-                                if let Some(w) = app_handle.get_webview_window("main") {
-                                    let _ = w.show();
-                                    let _ = w.set_focus();
-                                }
-                            }
-                        })
                         .build(),
                 )?;
             }

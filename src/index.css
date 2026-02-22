@@ -252,6 +252,17 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.settings-workspace-meta .settings-row:has(.settings-workspace-icon-picker) {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.settings-workspace-meta .settings-row:has(.settings-workspace-icon-picker) .settings-workspace-icon-picker {
+  flex: 1 1 100%;
+  margin-top: 0.25rem;
+  margin-left: 4.5rem;
+}
+
 .settings-workspace-input {
   flex: 1;
   padding: 0.35rem 0.5rem;
@@ -262,12 +273,51 @@ body {
 }
 
 .settings-workspace-icon-input {
-  width: 3rem;
-  padding: 0.35rem;
-  font-size: 1rem;
+  width: 3.5rem;
+  min-width: 3.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 1.125rem;
   text-align: center;
   border: 1px solid #ddd;
   border-radius: 6px;
+  user-select: text;
+  cursor: text;
+}
+
+.settings-workspace-icon-input:focus {
+  outline: 2px solid #4a90d9;
+  outline-offset: 0;
+  border-color: #4a90d9;
+}
+
+.settings-workspace-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.settings-workspace-icon-picker button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 1.125rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-workspace-icon-picker button:hover {
+  border-color: #4a90d9;
+  background: rgba(74, 144, 217, 0.08);
+}
+
+.settings-workspace-icon-picker button.active {
+  border-color: #4a90d9;
+  background: rgba(74, 144, 217, 0.15);
 }
 
 .settings-options {
@@ -286,6 +336,22 @@ body {
 }
 
 .settings-radio input {
+  accent-color: #333;
+}
+
+.settings-row-checkbox {
+  margin-top: 0.25rem;
+}
+
+.settings-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.settings-checkbox input {
   accent-color: #333;
 }
 

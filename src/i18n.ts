@@ -51,6 +51,10 @@ const strings: Record<Lang, Record<string, string>> = {
     workspaceDesc: "描述",
     workspaceDescPlaceholder: "可选，如：日常任务剪贴",
     workspaceIcon: "图标",
+    workspaceReadOnly: "保护模式（只读）",
+    shortcut: "快捷键",
+    shortcutLabel: "唤出/收起窗口",
+    shortcutPlaceholder: "如 Alt+C、Super+C",
   },
   en: {
     title: "Clipboard",
@@ -82,6 +86,10 @@ const strings: Record<Lang, Record<string, string>> = {
     workspaceDesc: "Description",
     workspaceDescPlaceholder: "Optional, e.g. Daily task clips",
     workspaceIcon: "Icon",
+    workspaceReadOnly: "Protection mode (read-only)",
+    shortcut: "Shortcut",
+    shortcutLabel: "Show/hide window",
+    shortcutPlaceholder: "e.g. Alt+C, Super+C",
   },
 };
 

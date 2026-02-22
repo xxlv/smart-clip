@@ -9,6 +9,7 @@ export interface Workspace {
   bg_gradient: string | null;
   bg_image_url: string;
   sort_order: number;
+  read_only?: boolean;
   created_at: string;
 }
 
