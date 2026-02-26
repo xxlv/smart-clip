@@ -77,7 +77,7 @@ The following crates will be added to `src-tauri/Cargo.toml` to support the impl
 ### Step 4.4: Sync Logic & Tauri Commands (`sync.rs` & `lib.rs`)
 -   Define the core `synchronize` function that orchestrates the sync process.
 -   Tauri commands exposed to the frontend:
-    -   `configure_yomemo(args: { apiKey, pemPath })`: Receive and persist credentials to `config.json`.
+    -   `configure_yomemo({ apiKey, pemPath })`: Receive and persist credentials to `config.json`.
     -   `trigger_yomemo_sync()`: Manually trigger sync.
     -   `get_yomemo_me()`: Fetch user info from `/me` (avatar, name, email, Pro).
     -   `get_yomemo_auto_sync()` / `set_yomemo_auto_sync(enabled)`: Auto-sync toggle (sync every 5 min when enabled).
@@ -85,7 +85,7 @@ The following crates will be added to `src-tauri/Cargo.toml` to support the impl
 
 ## 5. Frontend Integration
 
--   **Settings:** API Key and PEM file path input; call `invoke('configure_yomemo', { args: { apiKey, pemPath } })`.
+-   **Settings:** API Key and PEM file path input; call `invoke('configure_yomemo', { apiKey, pemPath })`.
 -   **Sync:** Manual trigger via `invoke('trigger_yomemo_sync')`; auto-sync checkbox bound to `get_yomemo_auto_sync` / `set_yomemo_auto_sync` (interval: 5 min).
 -   **Header avatar:** When YoMemo is configured, show avatar next to gear icon; hover tooltip with name, email, Pro status. Pro users get gold ring (`header-avatar-pro`).
 -   **Avatar 429 handling:** Use `onError` fallback and `referrerPolicy="no-referrer"` for robustness.

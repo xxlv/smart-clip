@@ -464,20 +464,12 @@ fn toggle_main_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(serde::Deserialize)]
-struct ConfigureYomemoArgs {
-    #[serde(alias = "apiKey")]
-    api_key: String,
-    #[serde(alias = "pemPath")]
-    pem_path: String,
-}
-
 #[tauri::command]
 async fn configure_yomemo(
-    args: ConfigureYomemoArgs,
+    api_key: String,
+    pem_path: String,
     state: tauri::State<'_, YomemoState>,
 ) -> Result<(), String> {
-    let ConfigureYomemoArgs { api_key, pem_path } = args;
     if api_key.is_empty() || pem_path.is_empty() {
         return Err("API key and PEM path cannot be empty.".to_string());
     }

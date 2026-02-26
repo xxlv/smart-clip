@@ -149,7 +149,8 @@ function App() {
     setYomemoStatus("Saving...");
     try {
       await invoke("configure_yomemo", {
-        args: { apiKey: yomemoApiKey, pemPath: yomemoPemPath },
+        apiKey: yomemoApiKey,
+        pemPath: yomemoPemPath,
       });
       setYomemoStatus("Configuration saved successfully!");
       setYomemoConfigured(true);
