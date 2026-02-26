@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
@@ -103,11 +104,72 @@ function App() {
     left: number;
   } | null>(null);
   const [shortcutEdit, setShortcutEdit] = useState("");
+  const [yomemoApiKey, setYomemoApiKey] = useState("");
+  const [yomemoPemPath, setYomemoPemPath] = useState("");
+  const [yomemoStatus, setYomemoStatus] = useState("");
+  const [yomemoMe, setYomemoMe] = useState<{
+    id: string;
+    email: string;
+    name: string;
+    avatar: string;
+    pro: boolean;
+  } | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [yomemoAutoSync, setYomemoAutoSync] = useState(false);
+  const [avatarTooltipVisible, setAvatarTooltipVisible] = useState(false);
+  const [yomemoConfigured, setYomemoConfigured] = useState(false);
   const lastAddedRef = useRef<string>("");
   const hidePreviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const shortcutRef = useRef<string | null>(null);
+
+  const selectPemFile = useCallback(async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "PEM Key File", extensions: ["pem"] }],
+      });
+      if (typeof selected === "string") {
+        setYomemoPemPath(selected);
+      }
+    } catch (err) {
+      setYomemoStatus(`Error selecting file: ${err}`);
+    }
+  }, []);
+
+  const refreshYomemoMe = useCallback(() => {
+    setAvatarLoadFailed(false);
+    invoke<{ id: string; email: string; name: string; avatar: string; pro: boolean } | null>("get_yomemo_me")
+      .then((me) => setYomemoMe(me ?? null))
+      .catch(() => setYomemoMe(null));
+  }, []);
+
+  const configureYomemo = useCallback(async () => {
+    setYomemoStatus("Saving...");
+    try {
+      await invoke("configure_yomemo", {
+        args: { apiKey: yomemoApiKey, pemPath: yomemoPemPath },
+      });
+      setYomemoStatus("Configuration saved successfully!");
+      setYomemoConfigured(true);
+      refreshYomemoMe();
+    } catch (err) {
+      setYomemoStatus(`Error: ${err}`);
+    }
+  }, [yomemoApiKey, yomemoPemPath, refreshYomemoMe]);
+
+  const testYomemoSync = useCallback(async () => {
+    setYomemoStatus("Syncing...");
+    setAvatarLoadFailed(false);
+    try {
+      const me = await invoke<{ id: string; email: string; name: string; avatar: string; pro: boolean }>("trigger_yomemo_sync");
+      setYomemoMe(me);
+      setYomemoStatus("Sync test completed successfully!");
+    } catch (err) {
+      setYomemoStatus(`Error: ${err}`);
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -161,10 +223,32 @@ function App() {
   }, [refreshWorkspaces]);
 
   useEffect(() => {
+    invoke<boolean>("get_yomemo_auto_sync").then(setYomemoAutoSync).catch(() => {});
+    invoke<{ api_key: string; pem_path: string } | null>("get_yomemo_config")
+      .then((cfg) => {
+        if (cfg?.api_key?.trim()) {
+          setYomemoConfigured(true);
+          refreshYomemoMe();
+        }
+      })
+      .catch(() => {});
+  }, [refreshYomemoMe]);
+
+  useEffect(() => {
     if (settingsOpen) {
       invoke<string>("get_shortcut").then(setShortcutEdit).catch(() => {});
+      invoke<{ api_key: string; pem_path: string } | null>("get_yomemo_config")
+        .then((cfg) => {
+          if (cfg) {
+            setYomemoApiKey(cfg.api_key);
+            setYomemoPemPath(cfg.pem_path);
+            setYomemoConfigured(true);
+          }
+        })
+        .catch(() => {});
+      refreshYomemoMe();
     }
-  }, [settingsOpen]);
+  }, [settingsOpen, refreshYomemoMe]);
 
   const applyShortcut = useCallback(async () => {
     const s = shortcutEdit.trim();
@@ -207,6 +291,19 @@ function App() {
     );
     return () => clearInterval(id);
   }, [currentWorkspaceId, refreshClips]);
+
+  useEffect(() => {
+    if (!yomemoAutoSync) return;
+    const syncInterval = 5 * 60 * 1000;
+    const runSync = () => {
+      invoke("trigger_yomemo_sync")
+        .then((me) => setYomemoMe(me))
+        .catch(() => {});
+    };
+    runSync();
+    const id = setInterval(runSync, syncInterval);
+    return () => clearInterval(id);
+  }, [yomemoAutoSync]);
 
   useEffect(() => {
     if (clips[0]?.content) lastAddedRef.current = clips[0].content;
@@ -417,6 +514,42 @@ function App() {
           </span>
         </button>
         <div className="header-actions">
+          {(yomemoMe || yomemoConfigured) && (
+            <div
+              className="header-avatar-wrap"
+              onMouseEnter={() => setAvatarTooltipVisible(true)}
+              onMouseLeave={() => setAvatarTooltipVisible(false)}
+            >
+              {yomemoMe ? (
+                <>
+                  <div className={`header-avatar-container ${yomemoMe.pro ? "header-avatar-pro" : ""}`} title={yomemoMe.pro ? "Pro" : undefined}>
+                    {yomemoMe.avatar && !avatarLoadFailed ? (
+                      <img
+                        src={yomemoMe.avatar}
+                        alt=""
+                        className="header-avatar"
+                        onError={() => setAvatarLoadFailed(true)}
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="header-avatar-initial">
+                        {yomemoMe.name?.charAt(0) || yomemoMe.email?.charAt(0) || "?"}
+                      </div>
+                    )}
+                  </div>
+                  {avatarTooltipVisible && (
+                    <div className="header-avatar-tooltip">
+                      <div className="header-avatar-tooltip-name">{yomemoMe.name || yomemoMe.email}</div>
+                      <div className="header-avatar-tooltip-email">{yomemoMe.email}</div>
+                      {yomemoMe.pro && <span className="header-avatar-tooltip-pro">PRO</span>}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="header-avatar-initial" title="YoMemo configured">✓</div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="btn-icon"
@@ -498,6 +631,89 @@ function App() {
               aria-label={t(lang, "shortcutLabel")}
             />
           </div>
+          <div className="settings-head">Yomemo.ai Sync</div>
+          {yomemoMe && (
+            <div className="settings-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              {yomemoMe.avatar && !avatarLoadFailed ? (
+                <img
+                  src={yomemoMe.avatar}
+                  alt=""
+                  style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                  onError={() => setAvatarLoadFailed(true)}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2em' }}>
+                  {yomemoMe.name?.charAt(0) || yomemoMe.email?.charAt(0) || '?'}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {yomemoMe.name || yomemoMe.email}
+                </div>
+                <div style={{ fontSize: '0.85em', opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {yomemoMe.email}
+                </div>
+              </div>
+              {yomemoMe.pro && (
+                <span style={{ fontSize: '0.75em', padding: '2px 8px', borderRadius: 4, background: 'var(--accent)', color: 'var(--bg-primary)' }}>
+                  PRO
+                </span>
+              )}
+            </div>
+          )}
+          <div className="settings-row">
+            <span>API Key</span>
+            <input
+              type="password"
+              className="settings-workspace-input"
+              placeholder="Your Yomemo.ai API Key"
+              value={yomemoApiKey}
+              onChange={(e) => setYomemoApiKey(e.target.value)}
+            />
+          </div>
+          <div className="settings-row" style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ flexShrink: 0, marginRight: '8px' }}>PEM Path</span>
+            <input
+              type="text"
+              className="settings-workspace-input"
+              style={{ flexGrow: 1 }}
+              placeholder="Path to your PEM private key file"
+              value={yomemoPemPath}
+              onChange={(e) => setYomemoPemPath(e.target.value)}
+            />
+            <button type="button" onClick={selectPemFile} style={{ marginLeft: '8px' }}>
+              Browse...
+            </button>
+          </div>
+          <div className="settings-row">
+              <button type="button" onClick={configureYomemo}>
+                  Save Configuration
+              </button>
+              <button type="button" onClick={testYomemoSync} style={{ marginLeft: '8px' }}>
+                  Run Sync Test
+              </button>
+          </div>
+          {yomemoMe && (
+            <div className="settings-row settings-row-checkbox">
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={yomemoAutoSync}
+                  onChange={(e) => {
+                    const v = e.target.checked;
+                    setYomemoAutoSync(v);
+                    invoke("set_yomemo_auto_sync", { enabled: v }).catch(() => {});
+                  }}
+                />
+                <span>{lang === "zh" ? "自动同步" : "Auto sync"}</span>
+              </label>
+              <span style={{ fontSize: '0.75em', opacity: 0.7, marginLeft: '0.5rem' }}>
+                {lang === "zh" ? "每 5 分钟同步到云端" : "Every 5 min"}
+              </span>
+            </div>
+          )}
+          {yomemoStatus && <div className="settings-row" style={{ fontSize: '0.8em', opacity: 0.8 }}>{yomemoStatus}</div>}
           <div className="settings-head">{t(lang, "currentWorkspace")}</div>
           <div className="settings-workspace-meta">
             <div className="settings-row">

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="roundBg">
+      <rect width="512" height="512" rx="115" ry="115"/>
+    </clipPath>
+  </defs>
+
+  <!-- White background -->
+  <rect width="512" height="512" rx="115" ry="115" fill="#FFFFFF"/>
+
+  <!--
+    Clipboard shape made of 4 Google-palette colored quadrants
+    Top-left: Blue   #4285F4
+    Top-right: Red   #EA4335
+    Bottom-left: Green #34A853
+    Bottom-right: Yellow #FBBC05
+
+    Clipboard body: rounded rect, clipped into 4 quadrants
+    Top clip bar: neutral dark, centered
+  -->
+
+  <!-- Clipboard body base (used as clip reference) -->
+  <!-- We draw 4 colored halves inside the clipboard rect: x=152 y=168 w=208 h=248 rx=20 -->
+
+  <!-- Top-left quadrant fill -->
+  <clipPath id="clipBoard">
+    <rect x="152" y="168" width="208" height="248" rx="20" ry="20"/>
+  </clipPath>
+
+  <g clip-path="url(#clipBoard)">
+    <!-- Blue: top-left -->
+    <rect x="152" y="168" width="104" height="124" fill="#4285F4"/>
+    <!-- Red: top-right -->
+    <rect x="256" y="168" width="104" height="124" fill="#EA4335"/>
+    <!-- Green: bottom-left -->
+    <rect x="152" y="292" width="104" height="124" fill="#34A853"/>
+    <!-- Yellow: bottom-right -->
+    <rect x="256" y="292" width="104" height="124" fill="#FBBC05"/>
+  </g>
+
+  <!-- White divider cross (thin lines between quadrants) -->
+  <rect x="248" y="168" width="16" height="248" fill="#FFFFFF"/>
+  <rect x="152" y="284" width="208" height="16" fill="#FFFFFF"/>
+
+  <!-- White circle center dot -->
+  <circle cx="256" cy="292" r="18" fill="#FFFFFF"/>
+
+  <!-- Clipboard clip bar (top center) -->
+  <rect x="214" y="148" width="84" height="36" rx="10" ry="10" fill="#3C3C3C"/>
+  <!-- Inner hole -->
+  <rect x="232" y="157" width="48" height="18" rx="9" ry="9" fill="#FFFFFF"/>
+
+  <!-- Thin outline around clipboard for definition -->
+  <rect x="152" y="168" width="208" height="248" rx="20" ry="20" fill="none" stroke="#E0E0E0" stroke-width="2"/>
+
+</svg>

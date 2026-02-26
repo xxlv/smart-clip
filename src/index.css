@@ -440,6 +440,74 @@ body {
   gap: 0.35rem;
 }
 
+.header-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-avatar-container {
+  position: relative;
+  display: inline-block;
+}
+
+.header-avatar,
+.header-avatar-initial {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.header-avatar-pro {
+  border-radius: 50%;
+}
+
+.header-avatar-initial {
+  background: var(--accent, #4a90d9);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-avatar-tooltip {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  background: #333;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.header-avatar-tooltip-name {
+  font-weight: 600;
+}
+
+.header-avatar-tooltip-email {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  margin-top: 0.15rem;
+}
+
+.header-avatar-tooltip-pro {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: var(--accent, #4a90d9);
+  border-radius: 4px;
+}
+
 .btn-add,
 .btn-clear {
   font-size: 0.8125rem;

@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Manager;
 
+mod yomemo;
+
 #[cfg(target_os = "linux")]
 fn default_shortcut() -> String {
     "Super+C".into()
@@ -18,6 +20,10 @@ const DEFAULT_WORKSPACE_ICON: &str = "📋";
 
 struct AppState {
     db: Mutex<Option<Connection>>,
+}
+
+struct YomemoState {
+    config: Mutex<Option<yomemo::config::YomemoConfig>>,
 }
 
 fn db_path() -> PathBuf {
@@ -38,6 +44,20 @@ fn config_path() -> PathBuf {
 struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     shortcut: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    yomemo: Option<YomemoConfigPersisted>,
+    /// idempotent_key per workspace (returned by API after first create)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    yomemo_workspace_keys: Option<std::collections::HashMap<String, String>>,
+    /// Auto sync to YoMemo when configured (sync every 5 min)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    yomemo_auto_sync: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct YomemoConfigPersisted {
+    api_key: String,
+    pem_path: String,
 }
 
 fn load_config() -> AppConfig {
@@ -98,7 +118,10 @@ fn init_db() -> rusqlite::Result<Connection> {
         )
         .unwrap_or(0);
     if col_count == 0 {
-        let _ = conn.execute("ALTER TABLE clips ADD COLUMN workspace_id INTEGER NOT NULL DEFAULT 1", []);
+        let _ = conn.execute(
+            "ALTER TABLE clips ADD COLUMN workspace_id INTEGER NOT NULL DEFAULT 1",
+            [],
+        );
     }
     let read_only_count: i64 = conn
         .query_row(
@@ -108,7 +131,10 @@ fn init_db() -> rusqlite::Result<Connection> {
         )
         .unwrap_or(0);
     if read_only_count == 0 {
-        let _ = conn.execute("ALTER TABLE workspaces ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute(
+            "ALTER TABLE workspaces ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
     }
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))?;
     if count == 0 {
@@ -216,7 +242,9 @@ fn create_workspace(
     let desc = description.unwrap_or_default();
     let icon_str = icon.unwrap_or_else(|| DEFAULT_WORKSPACE_ICON.to_string());
     let max_order: Option<i64> = conn
-        .query_row("SELECT MAX(sort_order) FROM workspaces", [], |row| row.get(0))
+        .query_row("SELECT MAX(sort_order) FROM workspaces", [], |row| {
+            row.get(0)
+        })
         .optional()
         .map_err(|e| e.to_string())?;
     let sort_order = max_order.unwrap_or(0) + 1;
@@ -394,8 +422,11 @@ fn clear_clips(workspace_id: i64, state: tauri::State<AppState>) -> Result<(), S
     if read_only != 0 {
         return Err("Workspace is read-only".to_string());
     }
-    conn.execute("DELETE FROM clips WHERE workspace_id = ?1", params![workspace_id])
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM clips WHERE workspace_id = ?1",
+        params![workspace_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -433,6 +464,192 @@ fn toggle_main_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct ConfigureYomemoArgs {
+    #[serde(alias = "apiKey")]
+    api_key: String,
+    #[serde(alias = "pemPath")]
+    pem_path: String,
+}
+
+#[tauri::command]
+async fn configure_yomemo(
+    args: ConfigureYomemoArgs,
+    state: tauri::State<'_, YomemoState>,
+) -> Result<(), String> {
+    let ConfigureYomemoArgs { api_key, pem_path } = args;
+    if api_key.is_empty() || pem_path.is_empty() {
+        return Err("API key and PEM path cannot be empty.".to_string());
+    }
+    let yomemo_config = yomemo::config::YomemoConfig {
+        api_key: api_key.clone(),
+        pem_path: pem_path.clone(),
+    };
+    {
+        let mut config = state.config.lock().map_err(|e| e.to_string())?;
+        *config = Some(yomemo_config.clone());
+    }
+    // Persist to config.json so it survives restart
+    let mut app_config = load_config();
+    app_config.yomemo = Some(YomemoConfigPersisted {
+        api_key,
+        pem_path,
+    });
+    save_config(&app_config)?;
+    println!("Yomemo config updated and saved.");
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct YomemoMeInfo {
+    id: String,
+    email: String,
+    name: String,
+    avatar: String,
+    pro: bool,
+}
+
+#[tauri::command]
+fn get_yomemo_auto_sync() -> bool {
+    load_config().yomemo_auto_sync.unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_yomemo_auto_sync(enabled: bool) -> Result<(), String> {
+    let mut config = load_config();
+    config.yomemo_auto_sync = Some(enabled);
+    save_config(&config)
+}
+
+#[tauri::command]
+fn get_yomemo_config() -> Result<Option<YomemoConfigForFrontend>, String> {
+    let app_config = load_config();
+    Ok(app_config.yomemo.map(|y| YomemoConfigForFrontend {
+        api_key: y.api_key,
+        pem_path: y.pem_path,
+    }))
+}
+
+#[derive(serde::Serialize)]
+struct YomemoConfigForFrontend {
+    api_key: String,
+    pem_path: String,
+}
+
+#[tauri::command]
+async fn get_yomemo_me(state: tauri::State<'_, YomemoState>) -> Result<Option<YomemoMeInfo>, String> {
+    let config = {
+        let config_guard = state.config.lock().map_err(|e| e.to_string())?;
+        config_guard.clone()
+    };
+    let Some(conf) = config else {
+        return Ok(None);
+    };
+    let client = yomemo::client::YomemoClient::new(conf);
+    match client.me().await {
+        Ok(me) => Ok(Some(YomemoMeInfo {
+            id: me.id,
+            email: me.email,
+            name: me.name,
+            avatar: me.avatar,
+            pro: me.pro,
+        })),
+        Err(_) => Ok(None),
+    }
+}
+
+#[tauri::command]
+async fn trigger_yomemo_sync(
+    app_state: tauri::State<'_, AppState>,
+    yomemo_state: tauri::State<'_, YomemoState>,
+) -> Result<YomemoMeInfo, String> {
+    println!("Attempting to trigger yomemo sync...");
+
+    let config = {
+        let config_guard = yomemo_state.config.lock().map_err(|e| e.to_string())?;
+        config_guard.clone()
+    };
+
+    let Some(conf) = config else {
+        return Err("Yomemo sync is not configured.".to_string());
+    };
+
+    let me_info = yomemo::sync::synchronize(&conf)
+        .await
+        .map_err(|e| e.to_string())?;
+    println!("Yomemo sync successful for user: {}", me_info.email);
+
+    // Sync each workspace to its own handle: smart-clip:workspace:<id>
+    let workspace_data: Vec<(i64, String)> = {
+        let db_guard = app_state.db.lock().map_err(|e| e.to_string())?;
+        let conn = db_guard.as_ref().ok_or("DB not initialized")?;
+        let workspaces: Vec<i64> = conn
+            .prepare("SELECT id FROM workspaces ORDER BY id")
+            .and_then(|mut stmt| {
+                let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
+                rows.collect::<Result<Vec<_>, _>>()
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut out = Vec::new();
+        for workspace_id in workspaces {
+            let clips: Vec<Clip> = conn
+                .prepare("SELECT id, content, created_at FROM clips WHERE workspace_id = ?1 ORDER BY id DESC LIMIT 500")
+                .and_then(|mut stmt| {
+                    let rows = stmt.query_map(params![workspace_id], |row| {
+                        Ok(Clip {
+                            id: row.get(0)?,
+                            content: row.get(1)?,
+                            created_at: row.get(2)?,
+                        })
+                    })?;
+                    rows.collect::<Result<Vec<_>, _>>()
+                })
+                .map_err(|e| e.to_string())?;
+            let content_json = serde_json::to_string(&clips).map_err(|e| e.to_string())?;
+            out.push((workspace_id, content_json));
+        }
+        out
+    };
+
+    let mut app_config = load_config();
+    let workspace_keys = app_config
+        .yomemo_workspace_keys
+        .get_or_insert_with(std::collections::HashMap::new);
+
+    for (workspace_id, content_json) in workspace_data {
+        let stored_key = workspace_keys.get(&workspace_id.to_string()).cloned();
+        match yomemo::sync::sync_workspace(&conf, workspace_id, content_json, stored_key).await {
+            Ok(Some(returned_key)) => {
+                workspace_keys.insert(workspace_id.to_string(), returned_key);
+                println!(
+                    "Synced workspace {} (handle: {})",
+                    workspace_id,
+                    yomemo::sync::workspace_handle(workspace_id)
+                );
+            }
+            Ok(None) => {
+                println!(
+                    "Synced workspace {} (handle: {})",
+                    workspace_id,
+                    yomemo::sync::workspace_handle(workspace_id)
+                );
+            }
+            Err(e) => eprintln!("Sync workspace {} failed: {}", workspace_id, e),
+        }
+    }
+
+    let _ = save_config(&app_config);
+
+    Ok(YomemoMeInfo {
+        id: me_info.id,
+        email: me_info.email,
+        name: me_info.name,
+        avatar: me_info.avatar,
+        pro: me_info.pro,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let db = match init_db() {
@@ -443,23 +660,55 @@ pub fn run() {
         }
     };
 
+    let yomemo_config = load_config()
+        .yomemo
+        .map(|y| {
+            println!("Loaded yomemo config from config.json.");
+            yomemo::config::YomemoConfig {
+                api_key: y.api_key,
+                pem_path: y.pem_path,
+            }
+        })
+        .or_else(|| {
+            match (
+                std::env::var("MEMO_API_KEY"),
+                std::env::var("MEMO_PRIVATE_KEY_PATH"),
+            ) {
+                (Ok(api_key), Ok(pem_path)) if !api_key.is_empty() && !pem_path.is_empty() => {
+                    println!("Loaded yomemo config from environment variables.");
+                    Some(yomemo::config::YomemoConfig { api_key, pem_path })
+                }
+                _ => None,
+            }
+        });
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState { db: Mutex::new(db) })
+        .manage(YomemoState {
+            config: Mutex::new(yomemo_config),
+        })
         .invoke_handler(tauri::generate_handler![
-        get_workspaces,
-        get_workspace,
-        create_workspace,
-        update_workspace,
-        delete_workspace,
-        get_clips,
-        add_clip,
-        delete_clip,
-        clear_clips,
-        get_shortcut,
-        set_shortcut,
-        toggle_main_window,
-    ])
+            get_workspaces,
+            get_workspace,
+            create_workspace,
+            update_workspace,
+            delete_workspace,
+            get_clips,
+            add_clip,
+            delete_clip,
+            clear_clips,
+            get_shortcut,
+            set_shortcut,
+            toggle_main_window,
+            configure_yomemo,
+            get_yomemo_config,
+            get_yomemo_me,
+            get_yomemo_auto_sync,
+            set_yomemo_auto_sync,
+            trigger_yomemo_sync,
+        ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
@@ -469,10 +718,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
-                app.handle().plugin(
-                    tauri_plugin_global_shortcut::Builder::new()
-                        .build(),
-                )?;
+                app.handle()
+                    .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
             }
             Ok(())
         })
